@@ -65,8 +65,10 @@ void Error_Handler(void);
 #define SW_USER2_GPIO_Port GPIOE
 #define USB_SW_Pin GPIO_PIN_14
 #define USB_SW_GPIO_Port GPIOC
-#define IMU_CS_Pin GPIO_PIN_4
-#define IMU_CS_GPIO_Port GPIOA
+#define ICM_SPI_INT_Pin GPIO_PIN_1
+#define ICM_SPI_INT_GPIO_Port GPIOA
+#define ICM_SPI_CS_Pin GPIO_PIN_4
+#define ICM_SPI_CS_GPIO_Port GPIOA
 #define DXL_PWR_EN_Pin GPIO_PIN_15
 #define DXL_PWR_EN_GPIO_Port GPIOF
 #define BUT_USER2_Pin GPIO_PIN_3

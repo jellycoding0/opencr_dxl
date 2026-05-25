@@ -106,13 +106,12 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM3_Init();
   MX_USART2_UART_Init();
-
-
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
   // 1. LED 강제 소등 (Active HIGH 보드이므로 RESET이 OFF)
-  HAL_GPIO_WritePin(GPIOE, LED3_Pin | LED2_Pin, GPIO_PIN_RESET); // LED3 소등
-  HAL_GPIO_WritePin(GPIOG, Status_LED_Pin | LED4_Pin | LED1_Pin, GPIO_PIN_RESET); // Status_LED, LED4, LED1 소등
+  HAL_GPIO_WritePin(GPIOE, LED3_Pin | LED2_Pin, GPIO_PIN_SET); // LED3 소등(1)
+  HAL_GPIO_WritePin(GPIOG, Status_LED_Pin | LED4_Pin | LED1_Pin, GPIO_PIN_SET); // Status_LED, LED4, LED1 소등(1)
 
   // 2. USB 스위치 활성화 및 타이머 시작 (이전 코드 유지)
   HAL_GPIO_WritePin(USB_SW_GPIO_Port, USB_SW_Pin, GPIO_PIN_SET);
@@ -120,9 +119,6 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim3);// TIM3 기본 타이머 인터럽트 시동
 
   /* USER CODE END 2 */
-
-  /* USB CDC 가상 시리얼 미들웨어 활성화 */
-  MX_USB_DEVICE_Init();
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -208,15 +204,15 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();
@@ -362,6 +358,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LED3_Pin|LED2_Pin, GPIO_PIN_RESET);
@@ -370,7 +367,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, USB_SW_Pin|DXL_DIR_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(DXL_PWR_EN_GPIO_Port, DXL_PWR_EN_Pin, GPIO_PIN_RESET);
@@ -398,12 +395,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : IMU_CS_Pin */
-  GPIO_InitStruct.Pin = IMU_CS_Pin;
+  /*Configure GPIO pin : ICM_SPI_INT_Pin */
+  GPIO_InitStruct.Pin = ICM_SPI_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(ICM_SPI_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : ICM_SPI_CS_Pin */
+  GPIO_InitStruct.Pin = ICM_SPI_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(IMU_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(ICM_SPI_CS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DXL_PWR_EN_Pin */
   GPIO_InitStruct.Pin = DXL_PWR_EN_Pin;
@@ -450,30 +453,37 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   {
     ms_counter++;
 
+
+    //  [Heartbeat] 0.5초마다 상태 LED 점멸 (Active LOW 기준)
+    if (ms_counter % 500 == 0)
+    {
+      HAL_GPIO_TogglePin(Status_LED_GPIO_Port, Status_LED_Pin);
+    }
+
     if (ms_counter % 10 == 0)
     {
       // ----------------------------------------------------
-      // [SW1 버튼] 누르면 LED 1 켜짐 (하드웨어 실측: SW1 = BUT_USER2 = PG3)
+      // [SW1 버튼] 누르면 LED 1 켜짐 (BUT_USER2 = PG3)
       // ----------------------------------------------------
-      if (HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin) == GPIO_PIN_RESET)
+      if (HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin) == GPIO_PIN_SET) //버튼 누르면(1)
       {
-        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); // 켜짐(0)
       }
       else
       {
-        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET); //꺼짐(1)
       }
 
       // ----------------------------------------------------
-      // [SW2 버튼] 누르면 LED 2 켜짐 (하드웨어 실측: SW2 = BUT_USER1 = PC12)
+      // [SW2 버튼] 누르면 LED 2 켜짐 (BUT_USER1 = PC12)
       // ----------------------------------------------------
-      if (HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin) == GPIO_PIN_RESET)
+      if (HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin) == GPIO_PIN_SET)
       {
-        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
       }
       else
       {
-        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
       }
     }
   }
