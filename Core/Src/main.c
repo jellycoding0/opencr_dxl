@@ -51,6 +51,8 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 volatile uint32_t ms_counter = 0; // 1ms마다 타이머 인터럽트에서 카운트 업
+volatile int16_t g_ax = 0, g_ay = 0, g_az = 0;// 6축 Raw 데이터를 담을 전역 변수
+volatile int16_t g_gx = 0, g_gy = 0, g_gz = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,7 +64,8 @@ static void MX_SPI1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+void IMU_Init(void);
+void Update_IMU_Data_And_Stream(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -117,6 +120,10 @@ int main(void)
   HAL_GPIO_WritePin(USB_SW_GPIO_Port, USB_SW_Pin, GPIO_PIN_SET);
   HAL_Delay(100); // 물리 소자 전압 안정화 마진 딜레이
   HAL_TIM_Base_Start_IT(&htim3);// TIM3 기본 타이머 인터럽트 시동
+
+  // 3. IMU 칩 Wake-up 이후 타이머 인터럽트 가동 (가장 안전한 순서)
+  IMU_Init(); 
+  HAL_TIM_Base_Start_IT(&htim3);
 
   /* USER CODE END 2 */
 
@@ -460,6 +467,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       HAL_GPIO_TogglePin(Status_LED_GPIO_Port, Status_LED_Pin);
     }
 
+
+    // [Task 2] 100ms(10Hz) 마다 가속도/자이로 고속 수신 및 USB 스트리밍 함수 단 1번 호출
+    if (ms_counter % 100 == 0)
+    {
+      Update_IMU_Data_And_Stream();
+    }
+
+
     if (ms_counter % 10 == 0)
     {
       // ----------------------------------------------------
@@ -488,6 +503,57 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
   }
 }
+
+// ICM-20648 초기 Wake-up (부팅 시 main단계에서 수행되므로 HAL_Delay 사용 가능)
+void IMU_Init(void)
+{
+    // Bank 0 강제 선택 (0x7F 레지스터 -> 0x00 기입)
+    uint8_t tx_bank[2] = {0x7F, 0x00};
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_Transmit(&hspi1, tx_bank, 2, 100);
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
+    HAL_Delay(10);
+
+    // Sleep 탈출 및 내부 오실레이터 선정 (0x06 레지스터 -> 0x01 기입)
+    uint8_t tx_wake[2] = {0x06, 0x01};
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_Transmit(&hspi1, tx_wake, 2, 100);
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
+    HAL_Delay(100); 
+}
+
+// 12바이트 가속도+자이로 일괄 획득 및 Native USB 스트리밍 (인터럽트용 내부 코드로 딜레이 제거)
+void Update_IMU_Data_And_Stream(void)
+{
+    uint8_t raw_buffer[12] = {0};
+    uint8_t start_addr = 0x2D | 0x80; // 가속도 상위 X축 시작 주소(0x2D) + SPI Read Bit(0x80)
+    char usb_msg[160];
+
+    // CS 슬롯 활성화 후 12바이트 연속 고속 읽기 (Burst Read 구조로 하드웨어 부담 최소화)
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
+    if (HAL_SPI_Transmit(&hspi1, &start_addr, 1, 10) == HAL_OK)
+    {
+        HAL_SPI_Receive(&hspi1, raw_buffer, 12, 10);
+    }
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
+
+    // 버퍼 가속도 데이터 매핑 (부호 있는 Signed 16-bit)
+    g_ax = (int16_t)((raw_buffer[0] << 8) | raw_buffer[1]);
+    g_ay = (int16_t)((raw_buffer[2] << 8) | raw_buffer[3]);
+    g_az = (int16_t)((raw_buffer[4] << 8) | raw_buffer[5]);
+
+    // 버퍼 자이로 데이터 매핑 (부호 있는 Signed 16-bit)
+    g_gx = (int16_t)((raw_buffer[6] << 8) | raw_buffer[7]);
+    g_gy = (int16_t)((raw_buffer[8] << 8) | raw_buffer[9]);
+    g_gz = (int16_t)((raw_buffer[10] << 8) | raw_buffer[11]);
+
+    // 한 줄 포맷팅 후 가볍게 USB 가상 컴포트로 데이터 스피팅(Spitting)
+    int len = snprintf(usb_msg, sizeof(usb_msg), 
+                       "A: %6d, %6d, %6d | G: %6d, %6d, %6d\r\n", 
+                       g_ax, g_ay, g_az, g_gx, g_gy, g_gz);
+    CDC_Transmit_FS((uint8_t*)usb_msg, len);
+}
+
 /* USER CODE END 4 */
 
  /* MPU Configuration */
