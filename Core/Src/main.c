@@ -115,6 +115,33 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // LED 1/2: Turned ON when Button is NOT pressed (1) in current code.
+    // So 1 = ON for these LEDs.
+    // To turn ON when pressed (0), we need to send 1.
+    // To turn OFF when released (1), we need to send 0.
+    if (HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin) == GPIO_PIN_RESET)
+    {
+      HAL_GPIO_WritePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin, GPIO_PIN_SET);   // ON (1)
+    }
+    else
+    {
+      HAL_GPIO_WritePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin, GPIO_PIN_RESET); // OFF (0)
+    }
+
+    if (HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin) == GPIO_PIN_RESET)
+    {
+      HAL_GPIO_WritePin(SYS_USER_LED2_GPIO_Port, SYS_USER_LED2_Pin, GPIO_PIN_SET);   // ON (1)
+    }
+    else
+    {
+      HAL_GPIO_WritePin(SYS_USER_LED2_GPIO_Port, SYS_USER_LED2_Pin, GPIO_PIN_RESET); // OFF (0)
+    }
+
+    // LED 3, 4, Status: Turned OFF when written with 1.
+    // So 1 = OFF for these LEDs.
+    HAL_GPIO_WritePin(SYS_USER_LED3_GPIO_Port, SYS_USER_LED3_Pin, GPIO_PIN_SET);   // OFF (1)
+    HAL_GPIO_WritePin(SYS_USER_LED4_GPIO_Port, SYS_USER_LED4_Pin, GPIO_PIN_SET);   // OFF (1)
+    HAL_GPIO_WritePin(SYS_STS_LED_GPIO_Port, SYS_STS_LED_Pin, GPIO_PIN_SET);       // OFF (1)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

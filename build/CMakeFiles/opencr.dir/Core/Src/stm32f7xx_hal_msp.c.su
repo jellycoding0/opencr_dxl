@@ -1,0 +1,7 @@
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:62:6:HAL_MspInit	16	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:90:6:HAL_SPI_MspInit	48	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:136:6:HAL_SPI_MspDeInit	16	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:168:6:HAL_TIM_Base_MspInit	24	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:194:6:HAL_TIM_Base_MspDeInit	16	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:219:6:HAL_UART_MspInit	184	static
+/home/ubuntu/ws/opencr_dxl/Core/Src/stm32f7xx_hal_msp.c:303:6:HAL_UART_MspDeInit	16	static

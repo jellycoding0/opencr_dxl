@@ -1,0 +1,37 @@
+cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_i2c_ex.c.obj: \
+ /home/ubuntu/ws/opencr_dxl/Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_i2c_ex.c \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Core/Inc/stm32f7xx_hal_conf.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_rcc.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_def.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Device/ST/STM32F7xx/Include/stm32f7xx.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Device/ST/STM32F7xx/Include/stm32f746xx.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Include/core_cm7.h \
+ /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdint.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Include/cmsis_version.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Include/cmsis_compiler.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Include/cmsis_gcc.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Include/mpu_armv7.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/CMSIS/Device/ST/STM32F7xx/Include/system_stm32f7xx.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h \
+ /usr/lib/gcc/arm-none-eabi/10.3.1/include/stddef.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_rcc_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_exti.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_gpio.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_gpio_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_dma.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_dma_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_cortex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_flash.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_flash_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_pwr.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_pwr_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_spi.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_spi_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_tim.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_tim_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_uart.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_uart_ex.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_pcd.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_ll_usb.h \
+ /home/ubuntu/ws/opencr_dxl/cmake/stm32cubemx/../../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_pcd_ex.h
