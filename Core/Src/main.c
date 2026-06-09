@@ -50,9 +50,7 @@ UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-volatile uint32_t ms_counter = 0; // 1ms마다 타이머 인터럽트에서 카운트 업
-volatile int16_t g_ax = 0, g_ay = 0, g_az = 0;// 6축 Raw 데이터를 담을 전역 변수
-volatile int16_t g_gx = 0, g_gy = 0, g_gz = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -64,8 +62,7 @@ static void MX_SPI1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-void IMU_Init(void);
-void Update_IMU_Data_And_Stream(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -112,19 +109,6 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  // 1. LED 강제 소등 (Active HIGH 보드이므로 RESET이 OFF)
-  HAL_GPIO_WritePin(GPIOE, LED3_Pin | LED2_Pin, GPIO_PIN_SET); // LED3 소등(1)
-  HAL_GPIO_WritePin(GPIOG, Status_LED_Pin | LED4_Pin | LED1_Pin, GPIO_PIN_SET); // Status_LED, LED4, LED1 소등(1)
-
-  // 2. USB 스위치 활성화 및 타이머 시작 (이전 코드 유지)
-  HAL_GPIO_WritePin(USB_SW_GPIO_Port, USB_SW_Pin, GPIO_PIN_SET);
-  HAL_Delay(100); // 물리 소자 전압 안정화 마진 딜레이
-  HAL_TIM_Base_Start_IT(&htim3);// TIM3 기본 타이머 인터럽트 시동
-
-  // 3. IMU 칩 Wake-up 이후 타이머 인터럽트 가동 (가장 안전한 순서)
-  IMU_Init(); 
-  HAL_TIM_Base_Start_IT(&htim3);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -159,8 +143,8 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 24;
-  RCC_OscInitStruct.PLL.PLLN = 432;
+  RCC_OscInitStruct.PLL.PLLM = 12;
+  RCC_OscInitStruct.PLL.PLLN = 216;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 9;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -181,8 +165,8 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
   {
@@ -249,7 +233,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 1600-1;
+  htim3.Init.Prescaler = 1080-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 100-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -368,7 +352,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, LED3_Pin|LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SYS_USER_LED3_Pin|SYS_USER_LED2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, USB_SW_Pin|DXL_DIR_Pin, GPIO_PIN_RESET);
@@ -380,10 +364,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(DXL_PWR_EN_GPIO_Port, DXL_PWR_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|Status_LED_Pin|LED4_Pin|LED1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : LED3_Pin LED2_Pin */
-  GPIO_InitStruct.Pin = LED3_Pin|LED2_Pin;
+  /*Configure GPIO pins : SYS_USER_LED3_Pin SYS_USER_LED2_Pin */
+  GPIO_InitStruct.Pin = SYS_USER_LED3_Pin|SYS_USER_LED2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -428,8 +412,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BUT_USER2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PG8 Status_LED_Pin LED4_Pin LED1_Pin */
-  GPIO_InitStruct.Pin = GPIO_PIN_8|Status_LED_Pin|LED4_Pin|LED1_Pin;
+  /*Configure GPIO pins : PG8 SYS_STS_LED_Pin SYS_USER_LED4_Pin SYS_USER_LED1_Pin */
+  GPIO_InitStruct.Pin = GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -453,106 +437,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-// TIM3 타이머 카운터가 Period(100-1)에 도달할 때마다 1ms 주기로 하드웨어 인터럽트 호출
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim->Instance == TIM3)
-  {
-    ms_counter++;
-
-
-    //  [Heartbeat] 0.5초마다 상태 LED 점멸 (Active LOW 기준)
-    if (ms_counter % 500 == 0)
-    {
-      HAL_GPIO_TogglePin(Status_LED_GPIO_Port, Status_LED_Pin);
-    }
-
-
-    // [Task 2] 100ms(10Hz) 마다 가속도/자이로 고속 수신 및 USB 스트리밍 함수 단 1번 호출
-    if (ms_counter % 100 == 0)
-    {
-      Update_IMU_Data_And_Stream();
-    }
-
-
-    if (ms_counter % 10 == 0)
-    {
-      // ----------------------------------------------------
-      // [SW1 버튼] 누르면 LED 1 켜짐 (BUT_USER2 = PG3)
-      // ----------------------------------------------------
-      if (HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin) == GPIO_PIN_SET) //버튼 누르면(1)
-      {
-        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); // 켜짐(0)
-      }
-      else
-      {
-        HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET); //꺼짐(1)
-      }
-
-      // ----------------------------------------------------
-      // [SW2 버튼] 누르면 LED 2 켜짐 (BUT_USER1 = PC12)
-      // ----------------------------------------------------
-      if (HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin) == GPIO_PIN_SET)
-      {
-        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
-      }
-      else
-      {
-        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
-      }
-    }
-  }
-}
-
-// ICM-20648 초기 Wake-up (부팅 시 main단계에서 수행되므로 HAL_Delay 사용 가능)
-void IMU_Init(void)
-{
-    // Bank 0 강제 선택 (0x7F 레지스터 -> 0x00 기입)
-    uint8_t tx_bank[2] = {0x7F, 0x00};
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, tx_bank, 2, 100);
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
-    HAL_Delay(10);
-
-    // Sleep 탈출 및 내부 오실레이터 선정 (0x06 레지스터 -> 0x01 기입)
-    uint8_t tx_wake[2] = {0x06, 0x01};
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, tx_wake, 2, 100);
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
-    HAL_Delay(100); 
-}
-
-// 12바이트 가속도+자이로 일괄 획득 및 Native USB 스트리밍 (인터럽트용 내부 코드로 딜레이 제거)
-void Update_IMU_Data_And_Stream(void)
-{
-    uint8_t raw_buffer[12] = {0};
-    uint8_t start_addr = 0x2D | 0x80; // 가속도 상위 X축 시작 주소(0x2D) + SPI Read Bit(0x80)
-    char usb_msg[160];
-
-    // CS 슬롯 활성화 후 12바이트 연속 고속 읽기 (Burst Read 구조로 하드웨어 부담 최소화)
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET);
-    if (HAL_SPI_Transmit(&hspi1, &start_addr, 1, 10) == HAL_OK)
-    {
-        HAL_SPI_Receive(&hspi1, raw_buffer, 12, 10);
-    }
-    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);
-
-    // 버퍼 가속도 데이터 매핑 (부호 있는 Signed 16-bit)
-    g_ax = (int16_t)((raw_buffer[0] << 8) | raw_buffer[1]);
-    g_ay = (int16_t)((raw_buffer[2] << 8) | raw_buffer[3]);
-    g_az = (int16_t)((raw_buffer[4] << 8) | raw_buffer[5]);
-
-    // 버퍼 자이로 데이터 매핑 (부호 있는 Signed 16-bit)
-    g_gx = (int16_t)((raw_buffer[6] << 8) | raw_buffer[7]);
-    g_gy = (int16_t)((raw_buffer[8] << 8) | raw_buffer[9]);
-    g_gz = (int16_t)((raw_buffer[10] << 8) | raw_buffer[11]);
-
-    // 한 줄 포맷팅 후 가볍게 USB 가상 컴포트로 데이터 스피팅(Spitting)
-    int len = snprintf(usb_msg, sizeof(usb_msg), 
-                       "A: %6d, %6d, %6d | G: %6d, %6d, %6d\r\n", 
-                       g_ax, g_ay, g_az, g_gx, g_gy, g_gz);
-    CDC_Transmit_FS((uint8_t*)usb_msg, len);
-}
 
 /* USER CODE END 4 */
 
