@@ -73,13 +73,12 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
     COMMENT "Generating binary file (${CMAKE_PROJECT_NAME}.bin)..."
 )
 
-# Upload firmware using STM32CubeProgrammer (USB DFU)
-# Note: Board must be in DFU mode (Hold BOOT button, press/release RESET)
-set(STM32_PROG_CLI "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe")
+# Upload firmware using dfu-util (DFU Mode)
+find_program(DFU_UTIL dfu-util REQUIRED)
 
 add_custom_target(flash
-    COMMAND "${STM32_PROG_CLI}" -c port=USB1 -w "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin" 0x08000000 -rst
+    COMMAND ${DFU_UTIL} -a 0 -d 0483:df11 -s 0x08000000:leave -D ${CMAKE_PROJECT_NAME}.bin
     DEPENDS ${CMAKE_PROJECT_NAME}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Uploading firmware via USB DFU using STM32CubeProgrammer..."
+    COMMENT "Uploading firmware via dfu-util..."
 )
