@@ -22,7 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "usbd_cdc_if.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,7 +64,9 @@ static void MX_SPI1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+uint8_t IMU_ReadRegister(uint8_t reg);
+void IMU_ReadMultiRegister(uint8_t reg, uint8_t* pData, uint16_t len);
+void IMU_WriteRegister(uint8_t reg, uint8_t data);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -108,13 +112,39 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(2000); 
 
+  // 1. 센서 활성화 및 설정
+  IMU_WriteRegister(0x7F, 0x00); // Bank 0
+  IMU_WriteRegister(0x06, 0x01); // Sleep 해제 & Auto Clock Source
+  HAL_Delay(100);
+
+  char buf[256];
+  sprintf(buf, "\r\nIMU Initialized. Reading Data...\r\n");
+  CDC_Transmit_FS((uint8_t*)buf, strlen(buf));
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    uint8_t raw_data[12];
+    int16_t ax, ay, az, gx, gy, gz;
+
+    // 가속도(0x2D)부터 자이로(0x38)까지 12바이트 연속 읽기
+    IMU_ReadMultiRegister(0x2D, raw_data, 12);
+
+    ax = (int16_t)(raw_data[0] << 8 | raw_data[1]);
+    ay = (int16_t)(raw_data[2] << 8 | raw_data[3]);
+    az = (int16_t)(raw_data[4] << 8 | raw_data[5]);
+    gx = (int16_t)(raw_data[6] << 8 | raw_data[7]);
+    gy = (int16_t)(raw_data[8] << 8 | raw_data[9]);
+    gz = (int16_t)(raw_data[10] << 8 | raw_data[11]);
+
+    sprintf(buf, "ACC: %6d, %6d, %6d | GYR: %6d, %6d, %6d\r\n", ax, ay, az, gx, gy, gz);
+    CDC_Transmit_FS((uint8_t*)buf, strlen(buf));
+
+    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -437,7 +467,35 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+uint8_t IMU_ReadRegister(uint8_t reg) {
+    uint8_t rx_data = 0;
+    uint8_t tx_data = reg | 0x80; // Read bit(MSB 1) 설정
 
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET); // CS 활성화
+    HAL_SPI_Transmit(&hspi1, &tx_data, 1, 100);
+    HAL_SPI_Receive(&hspi1, &rx_data, 1, 100);
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);   // CS 비활성화
+
+    return rx_data;
+}
+
+void IMU_WriteRegister(uint8_t reg, uint8_t data) {
+    uint8_t tx_addr = reg & 0x7F; // Write bit(MSB 0) 설정
+
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET); // CS 활성화
+    HAL_SPI_Transmit(&hspi1, &tx_addr, 1, 100);
+    HAL_SPI_Transmit(&hspi1, &data, 1, 100);
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);   // CS 비활성화
+}
+
+void IMU_ReadMultiRegister(uint8_t reg, uint8_t* pData, uint16_t len) {
+    uint8_t tx_data = reg | 0x80; // Read bit(MSB 1) 설정
+
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_RESET); // CS 활성화
+    HAL_SPI_Transmit(&hspi1, &tx_data, 1, 100);
+    HAL_SPI_Receive(&hspi1, pData, len, 100);
+    HAL_GPIO_WritePin(ICM_SPI_CS_GPIO_Port, ICM_SPI_CS_Pin, GPIO_PIN_SET);   // CS 비활성화
+}
 /* USER CODE END 4 */
 
  /* MPU Configuration */
