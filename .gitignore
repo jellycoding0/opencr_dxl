@@ -1,0 +1,40 @@
+# --- 빌드 결과물 ---
+build/
+bin/
+obj/
+
+# --- STM32 관련 바이너리 및 로그 ---
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.d
+
+# --- IDE 및 에디터 설정 ---
+.vscode/
+.idea/
+.settings/
+.project
+.cproject
+*.swp
+*.bak
+*~
+
+# --- 운영체제 임시 파일 ---
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# --- CMake 관련 (빌드 폴더 외부에서 실행될 경우 대비) ---
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+compile_commands.json
+
+# --- 기타 ---
+*.log
