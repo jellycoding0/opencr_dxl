@@ -130,10 +130,13 @@ int main(void)
   {
     uint8_t raw_data[12];
     int16_t ax, ay, az, gx, gy, gz;
+    float acc_x, acc_y, acc_z;
+    float gyr_x, gyr_y, gyr_z;
 
     // 가속도(0x2D)부터 자이로(0x38)까지 12바이트 연속 읽기
     IMU_ReadMultiRegister(0x2D, raw_data, 12);
 
+    // 16비트 정수 조합
     ax = (int16_t)(raw_data[0] << 8 | raw_data[1]);
     ay = (int16_t)(raw_data[2] << 8 | raw_data[3]);
     az = (int16_t)(raw_data[4] << 8 | raw_data[5]);
@@ -141,7 +144,21 @@ int main(void)
     gy = (int16_t)(raw_data[8] << 8 | raw_data[9]);
     gz = (int16_t)(raw_data[10] << 8 | raw_data[11]);
 
-    sprintf(buf, "ACC: %6d, %6d, %6d | GYR: %6d, %6d, %6d\r\n", ax, ay, az, gx, gy, gz);
+    // 실제 단위로 변환 (ICM-20648 기본 설정 기준)
+    // Accel: ±2g 범위일 때 16384 LSB/g
+    // Gyro: ±250dps 범위일 때 131 LSB/dps
+    acc_x = (float)ax / 16384.0f;
+    acc_y = (float)ay / 16384.0f;
+    acc_z = (float)az / 16384.0f;
+
+    gyr_x = (float)gx / 131.0f;
+    gyr_y = (float)gy / 131.0f;
+    gyr_z = (float)gz / 131.0f;
+
+    // 부동소수점 출력을 위해 sprintf 사용 (빌드 설정에서 float printf 활성화 필요할 수 있음)
+    // 만약 값이 안 나온다면 정수부/소수부 나누어 출력하는 방식으로 변경 예정
+    sprintf(buf, "ACC[g]: %5.2f, %5.2f, %5.2f | GYR[dps]: %7.2f, %7.2f, %7.2f\r\n", 
+            acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z);
     CDC_Transmit_FS((uint8_t*)buf, strlen(buf));
 
     HAL_Delay(100);
