@@ -25,11 +25,12 @@
 #include "usbd_cdc_if.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+#define RAD_TO_DEG 57.2957795131f
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -126,39 +127,36 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  static float yaw = 0.0f; // Yaw는 누적(적분)이 필요하므로 static 선언
+  
   while (1)
   {
     uint8_t raw_data[12];
     int16_t ax, ay, az, gx, gy, gz;
     float acc_x, acc_y, acc_z;
     float gyr_x, gyr_y, gyr_z;
+    float roll, pitch;
 
-    // 가속도(0x2D)부터 자이로(0x38)까지 12바이트 연속 읽기
+    // 데이터 읽기
     IMU_ReadMultiRegister(0x2D, raw_data, 12);
 
-    // 16비트 정수 조합
-    ax = (int16_t)(raw_data[0] << 8 | raw_data[1]);
-    ay = (int16_t)(raw_data[2] << 8 | raw_data[3]);
-    az = (int16_t)(raw_data[4] << 8 | raw_data[5]);
-    gx = (int16_t)(raw_data[6] << 8 | raw_data[7]);
-    gy = (int16_t)(raw_data[8] << 8 | raw_data[9]);
-    gz = (int16_t)(raw_data[10] << 8 | raw_data[11]);
+    // 정수 변환 및 단위 스케일링
+    acc_x = (float)((int16_t)(raw_data[0] << 8 | raw_data[1])) / 16384.0f;
+    acc_y = (float)((int16_t)(raw_data[2] << 8 | raw_data[3])) / 16384.0f;
+    acc_z = (float)((int16_t)(raw_data[4] << 8 | raw_data[5])) / 16384.0f;
+    gyr_z = (float)((int16_t)(raw_data[10] << 8 | raw_data[11])) / 131.0f;
 
-    // 실제 단위로 변환 (ICM-20648 기본 설정 기준)
-    // Accel: ±2g 범위일 때 16384 LSB/g
-    // Gyro: ±250dps 범위일 때 131 LSB/dps
-    acc_x = (float)ax / 16384.0f;
-    acc_y = (float)ay / 16384.0f;
-    acc_z = (float)az / 16384.0f;
+    // 1. Roll & Pitch 계산 (가속도계 기준)
+    // atan2 결과값(라디안)을 도(degree) 단위로 변환
+    roll = atan2(acc_y, acc_z) * RAD_TO_DEG;
+    pitch = atan2(-acc_x, sqrt(acc_y*acc_y + acc_z*acc_z)) * RAD_TO_DEG;
 
-    gyr_x = (float)gx / 131.0f;
-    gyr_y = (float)gy / 131.0f;
-    gyr_z = (float)gz / 131.0f;
+    // 2. Yaw 계산 (자이로 적분 - 단순 추정)
+    // 0.1초(100ms)마다 실행되므로 dt=0.1을 곱해줌
+    yaw += gyr_z * 0.1f;
 
-    // 부동소수점 출력을 위해 sprintf 사용 (빌드 설정에서 float printf 활성화 필요할 수 있음)
-    // 만약 값이 안 나온다면 정수부/소수부 나누어 출력하는 방식으로 변경 예정
-    sprintf(buf, "ACC[g]: %5.2f, %5.2f, %5.2f | GYR[dps]: %7.2f, %7.2f, %7.2f\r\n", 
-            acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z);
+    // 결과 출력
+    sprintf(buf, "ROLL: %6.1f | PITCH: %6.1f | YAW: %6.1f\r\n", roll, pitch, yaw);
     CDC_Transmit_FS((uint8_t*)buf, strlen(buf));
 
     HAL_Delay(100);
