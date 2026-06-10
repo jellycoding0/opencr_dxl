@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "usbd_cdc_if.h" // 헤더 추가 필수
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -352,7 +352,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, SYS_USER_LED3_Pin|SYS_USER_LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SYS_USER_LED3_Pin|SYS_USER_LED2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, USB_SW_Pin|DXL_DIR_Pin, GPIO_PIN_RESET);
@@ -364,7 +364,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(DXL_PWR_EN_GPIO_Port, DXL_PWR_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : SYS_USER_LED3_Pin SYS_USER_LED2_Pin */
   GPIO_InitStruct.Pin = SYS_USER_LED3_Pin|SYS_USER_LED2_Pin;

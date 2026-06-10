@@ -261,7 +261,30 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
+  // 수신된 첫 번째 바이트를 기준으로 LED 제어
+  switch (Buf[0])
+  {
+    case '1':
+      HAL_GPIO_TogglePin(GPIOG, SYS_USER_LED1_Pin);
+      break;
+    case '2':
+      HAL_GPIO_TogglePin(GPIOE, SYS_USER_LED2_Pin);
+      break;
+    case '3':
+      HAL_GPIO_TogglePin(GPIOE, SYS_USER_LED3_Pin);
+      break;
+    case '4':
+      HAL_GPIO_TogglePin(GPIOG, SYS_USER_LED4_Pin);
+      break;
+    default:
+      // 그 외의 키 입력 시 확인용으로 전체 LED1 토글 (기존 로직 유지 가능)
+      // HAL_GPIO_TogglePin(GPIOG, SYS_USER_LED1_Pin); 
+      break;
+  }
+
+  // 에코 (입력한 글자를 터미널에 다시 보여줌)
+  CDC_Transmit_FS(Buf, *Len);
+
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);
   /* USER CODE END 6 */
@@ -283,6 +306,13 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 7 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+  
+  uint32_t timeout = 0xFFFF;
+  while (hcdc->TxState != 0 && timeout--)
+  {
+    // Wait for previous transmission to complete
+  }
+
   if (hcdc->TxState != 0){
     return USBD_BUSY;
   }
