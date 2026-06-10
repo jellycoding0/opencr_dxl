@@ -110,7 +110,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
-
+  HAL_TIM_Base_Start_IT(&htim3); //인터럽트 시작
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -352,7 +352,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, SYS_USER_LED3_Pin|SYS_USER_LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SYS_USER_LED3_Pin|SYS_USER_LED2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, USB_SW_Pin|DXL_DIR_Pin, GPIO_PIN_RESET);
@@ -364,7 +364,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(DXL_PWR_EN_GPIO_Port, DXL_PWR_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_8|SYS_STS_LED_Pin|SYS_USER_LED4_Pin|SYS_USER_LED1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : SYS_USER_LED3_Pin SYS_USER_LED2_Pin */
   GPIO_InitStruct.Pin = SYS_USER_LED3_Pin|SYS_USER_LED2_Pin;
@@ -437,7 +437,21 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM3) //타이머 3이 인터럽트 발생시
+  {
+    static uint32_t counter = 0; //카운터 변수
+    counter++; //카운터 증가
 
+    if (counter >= 500) //500ms마다
+    {
+      counter = 0; //카운터 초기화
+      HAL_GPIO_TogglePin(GPIOG, SYS_USER_LED1_Pin); //LED1
+      // HAL_GPIO_TogglePin(SYS_STS_LED_GPIO_Port, SYS_STS_LED_Pin); //상태 LED 토글
+    }
+  }
+}
 /* USER CODE END 4 */
 
  /* MPU Configuration */
