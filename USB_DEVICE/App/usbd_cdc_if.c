@@ -31,7 +31,10 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-
+#define RX_RING_BUFFER_SIZE 2048
+uint8_t rx_ring_buffer[RX_RING_BUFFER_SIZE];
+uint32_t rx_ring_head = 0;
+uint32_t rx_ring_tail = 0;
 /* USER CODE END PV */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
@@ -261,6 +264,13 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
+  for (uint32_t i = 0; i < *Len; i++) {
+    uint32_t next = (rx_ring_head + 1) % RX_RING_BUFFER_SIZE;
+    if (next != rx_ring_tail) {
+      rx_ring_buffer[rx_ring_head] = Buf[i];
+      rx_ring_head = next;
+    }
+  }
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);
@@ -316,7 +326,26 @@ static int8_t CDC_TransmitCplt_FS(uint8_t *Buf, uint32_t *Len, uint8_t epnum)
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+int16_t CDC_ReadChar(void) {
+  if (rx_ring_head == rx_ring_tail) return -1;
+  uint8_t c = rx_ring_buffer[rx_ring_tail];
+  rx_ring_tail = (rx_ring_tail + 1) % RX_RING_BUFFER_SIZE;
+  return c;
+}
 
+#include <stdio.h>
+#include <stdarg.h>
+
+void CDC_Print(const char* fmt, ...) {
+    static char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len > 0) {
+        CDC_Transmit_FS((uint8_t*)buf, len);
+    }
+}
 /* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
 
 /**

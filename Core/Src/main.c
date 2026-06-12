@@ -22,7 +22,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "dynamixel.h"
+#include "usbd_cdc_if.h"
+#include <string.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,7 +53,10 @@ UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+uint32_t last_tick = 0;
+int8_t motor_state = 0; // 0: STOP, 1: FORWARD, 2: BACKWARD
+uint8_t btn1_prev = 1;
+uint8_t btn2_prev = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,13 +114,62 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-
+  DXL_Init();
+  HAL_Delay(500); // Wait for motors to boot
+  
+  // 1. Disable Torque first to change mode (using Broadcast ID 0xFE)
+  DXL_WriteByte(0xFE, DXL_ADDR_TORQUE_ENABLE, 0);
+  HAL_Delay(10);
+  
+  // 2. Set Operating Mode to Velocity Control (1)
+  DXL_WriteByte(0xFE, DXL_ADDR_OPERATING_MODE, 1);
+  HAL_Delay(10);
+  
+  // 3. Enable Torque for ID 1, 2 and Broadcast (0xFE)
+  DXL_WriteByte(0xFE, DXL_ADDR_TORQUE_ENABLE, 1);
+  DXL_WriteByte(1, DXL_ADDR_TORQUE_ENABLE, 1);
+  DXL_WriteByte(2, DXL_ADDR_TORQUE_ENABLE, 1);
+  
+  // Initial Stop
+  DXL_WriteWord(0xFE, DXL_ADDR_GOAL_VELOCITY, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // Button Check (Active LOW)
+    uint8_t btn1 = HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin);
+    uint8_t btn2 = HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin);
+
+    // Button 1 (Forward / Stop)
+    if (btn1 == GPIO_PIN_RESET && btn1_prev == GPIO_PIN_SET) {
+        if (motor_state == 1) motor_state = 0;
+        else motor_state = 1;
+        
+        int32_t vel = (motor_state == 1) ? 200 : 0;
+        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        HAL_Delay(50); // Simple debounce
+    }
+    btn1_prev = btn1;
+
+    // Button 2 (Backward / Stop)
+    if (btn2 == GPIO_PIN_RESET && btn2_prev == GPIO_PIN_SET) {
+        if (motor_state == 2) motor_state = 0;
+        else motor_state = 2;
+        
+        int32_t vel = (motor_state == 2) ? -200 : 0;
+        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        HAL_Delay(50); // Simple debounce
+    }
+    btn2_prev = btn2;
+
+    if (HAL_GetTick() - last_tick > 500) {
+      last_tick = HAL_GetTick();
+      HAL_GPIO_TogglePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -383,7 +438,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = USB_SW_Pin|DXL_DIR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ICM_SPI_INT_Pin */
