@@ -26,6 +26,7 @@
 #include "usbd_cdc_if.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,6 +61,14 @@ uint8_t btn2_prev = 1;
 uint16_t btn1_cnt = 0;
 uint16_t btn2_cnt = 0;
 uint32_t led_cnt = 0;
+
+float goal_linear_vel = 0.0f;
+float goal_angular_vel = 0.0f;
+
+#define WHEEL_SEPARATION    0.160f  // m (160mm)
+#define WHEEL_RADIUS        0.033f  // m (33mm)
+#define DXL_VEL_UNIT_RPM    0.229f  // 1 unit = 0.229 rpm
+#define PI                  3.14159265f
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -143,6 +152,37 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    int16_t res = CDC_ReadChar();
+    if (res != -1) {
+      static char cmd_buf[64];
+      static int buf_idx = 0;
+      
+      if (res == '\n' || res == '\r') {
+        if (buf_idx > 0) {
+          cmd_buf[buf_idx] = '\0';
+          if (cmd_buf[0] == 'V') {
+            // Receipt Confirmation: Toggle Blue LED
+            HAL_GPIO_TogglePin(GPIOE, SYS_USER_LED2_Pin);
+            
+            // Robust parsing without sscanf float
+            char *comma = strchr(cmd_buf, ',');
+            if (comma) {
+              *comma = '\0';
+              goal_linear_vel = atof(&cmd_buf[1]);
+              goal_angular_vel = atof(comma + 2); // Skip ',A'
+            }
+          } else if (cmd_buf[0] == 'T') {
+            // Test command: Move motors directly to verify DXL communication
+            DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, 100);
+            DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, -100);
+            HAL_Delay(100);
+          }
+        }
+        buf_idx = 0;
+      } else {
+        if (buf_idx < 63) cmd_buf[buf_idx++] = (char)res;
+      }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -469,15 +509,30 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM3)
   {
-    // --- 1. Button 1 Debouncing & Logic ---
+    // --- 1. Mobile Robot Kinematics (Differential Drive) ---
+    // Left wheel: ID 1, Right wheel: ID 2
+    float v_l = goal_linear_vel - (goal_angular_vel * WHEEL_SEPARATION / 2.0f);
+    float v_r = goal_linear_vel + (goal_angular_vel * WHEEL_SEPARATION / 2.0f);
+
+    // m/s to RPM
+    float rpm_l = (v_l / WHEEL_RADIUS) * (60.0f / (2.0f * PI));
+    float rpm_r = (v_r / WHEEL_RADIUS) * (60.0f / (2.0f * PI));
+
+    // RPM to DXL unit
+    int32_t dxl_vel_l = (int32_t)(rpm_l / DXL_VEL_UNIT_RPM);
+    int32_t dxl_vel_r = (int32_t)(rpm_r / DXL_VEL_UNIT_RPM);
+
+    // Apply motor commands (Adjusting signs for mounting direction)
+    DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)-dxl_vel_l);
+    DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)-dxl_vel_r);
+
+    // --- 2. Button 1 Debouncing & Logic (Safety Stop) ---
     uint8_t btn1 = HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin);
-    if (btn1 == GPIO_PIN_RESET) { // Pressed (Active LOW)
-      if (btn1_cnt < 5) btn1_cnt++; // 50ms (at 10ms interval)
+    if (btn1 == GPIO_PIN_RESET) {
+      if (btn1_cnt < 5) btn1_cnt++;
       if (btn1_cnt == 5 && btn1_prev == GPIO_PIN_SET) {
-        motor_state = (motor_state == 1) ? 0 : 1;
-        int32_t vel = (motor_state == 1) ? 200 : 0;
-        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        goal_linear_vel = 0;
+        goal_angular_vel = 0;
         btn1_prev = GPIO_PIN_RESET;
       }
     } else {
@@ -485,23 +540,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       btn1_prev = GPIO_PIN_SET;
     }
 
-    // --- 2. Button 2 Debouncing & Logic ---
-    uint8_t btn2 = HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin);
-    if (btn2 == GPIO_PIN_RESET) {
-      if (btn2_cnt < 5) btn2_cnt++;
-      if (btn2_cnt == 5 && btn2_prev == GPIO_PIN_SET) {
-        motor_state = (motor_state == 2) ? 0 : 2;
-        int32_t vel = (motor_state == 2) ? -200 : 0;
-        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        btn2_prev = GPIO_PIN_RESET;
-      }
-    } else {
-      btn2_cnt = 0;
-      btn2_prev = GPIO_PIN_SET;
-    }
-
-    // --- 3. LED Toggling (500ms -> 50 ticks at 10ms) ---
+    // --- 3. LED Toggling ---
     if (++led_cnt >= 50) {
       led_cnt = 0;
       HAL_GPIO_TogglePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin);
@@ -510,35 +549,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 /* USER CODE END 4 */
 
- /* MPU Configuration */
-
-void MPU_Config(void)
-{
-  MPU_Region_InitTypeDef MPU_InitStruct = {0};
-
-  /* Disables the MPU */
-  HAL_MPU_Disable();
-
-  /** Initializes and configures the Region and the memory to be protected
-  */
-  MPU_InitStruct.Enable = MPU_REGION_ENABLE;
-  MPU_InitStruct.Number = MPU_REGION_NUMBER0;
-  MPU_InitStruct.BaseAddress = 0x0;
-  MPU_InitStruct.Size = MPU_REGION_SIZE_4GB;
-  MPU_InitStruct.SubRegionDisable = 0x87;
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
-  MPU_InitStruct.AccessPermission = MPU_REGION_NO_ACCESS;
-  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
-  MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
-
-  HAL_MPU_ConfigRegion(&MPU_InitStruct);
-  /* Enables the MPU */
-  HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
-}
-
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
@@ -546,13 +556,13 @@ void MPU_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
@@ -564,8 +574,25 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
+void MPU_Config(void)
+{
+  MPU_Region_InitTypeDef MPU_InitStruct = {0};
+  HAL_MPU_Disable();
+  MPU_InitStruct.Enable = MPU_REGION_ENABLE;
+  MPU_InitStruct.Number = MPU_REGION_NUMBER0;
+  MPU_InitStruct.BaseAddress = 0x0;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_4GB;
+  MPU_InitStruct.SubRegionDisable = 0x87;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
+  MPU_InitStruct.AccessPermission = MPU_REGION_NO_ACCESS;
+  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
+  MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
+  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+  HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
+}

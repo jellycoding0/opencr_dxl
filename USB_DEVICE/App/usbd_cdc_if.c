@@ -33,8 +33,8 @@
 /* Private variables ---------------------------------------------------------*/
 #define RX_RING_BUFFER_SIZE 2048
 uint8_t rx_ring_buffer[RX_RING_BUFFER_SIZE];
-uint32_t rx_ring_head = 0;
-uint32_t rx_ring_tail = 0;
+volatile uint32_t rx_ring_head = 0;
+volatile uint32_t rx_ring_tail = 0;
 /* USER CODE END PV */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
