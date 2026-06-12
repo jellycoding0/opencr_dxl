@@ -20,17 +20,19 @@
    - 모터를 무한 회전이 가능한 **속도 제어 모드 (Velocity Control Mode, 값: 1)** 로 자동 설정합니다.
    - 브로드캐스트 ID (0xFE)를 사용하여 연결된 모든 모터의 토크를 한 번에 활성화합니다.
 
-3. **물리 버튼 제어 (Button Control)**:
-   - 보드에 내장된 User Button 2개를 사용하여 모터를 제어합니다. (Active Low 방식)
-   - **Button 1 (SW1 / PC12)**: 
-     - 한 번 클릭: 두 모터가 **정방향**으로 회전합니다. (속도: 200)
-     - 다시 클릭: 두 모터가 **정지**합니다.
-   - **Button 2 (SW2 / PG3)**:
-     - 한 번 클릭: 두 모터가 **역방향**으로 회전합니다. (속도: -200)
-     - 다시 클릭: 두 모터가 **정지**합니다.
+3. **타이머 인터럽트 기반 비차단 제어 (Timer-based Non-blocking Control)**:
+   - 기존의 `while(1)` 루프와 `HAL_Delay()` 기반의 제어 방식을 **TIM3 타이머 인터럽트(100Hz, 10ms 주기)** 기반으로 완전히 재설계했습니다.
+   - 모든 제어 로직이 인터럽트 서비스 루틴(ISR) 내에서 동작하므로, 메인 루프는 비워져 있으며 다른 비동기 작업에 CPU 자원을 할당할 수 있습니다.
 
-4. **상태 표시 (Status Indication)**:
-   - User LED 1 (PG12)이 500ms 간격으로 깜빡이며 메인 제어 루프가 정상적으로 동작 중임을 알립니다.
+4. **정밀한 버튼 제어 및 디바운싱 (Button Control & Debouncing)**:
+   - **소프트웨어 디바운싱:** `HAL_Delay` 없이 10ms 주기의 타이머 카운터를 사용하여 50ms 동안 버튼 상태가 유지될 때만 입력을 인정하는 정밀한 상태 머신 방식을 사용합니다.
+   - **Button 1 (SW1 / PC12)**: 
+     - 토글 동작: 정방향 회전(속도: 200) ↔ 정지.
+   - **Button 2 (SW2 / PG3)**:
+     - 토글 동작: 역방향 회전(속도: -200) ↔ 정지.
+
+5. **시스템 상태 표시 (System Heartbeat)**:
+   - User LED 1 (PG12)이 타이머 카운터를 통해 500ms 간격으로 깜빡이며 시스템이 정상 동작 중임을 나타냅니다.
 
 ## 빌드 및 업로드 (Building and Flashing)
 
@@ -45,11 +47,16 @@
    arm-none-eabi-objcopy -O binary opencr.elf opencr.bin
    ```
 
-3. 생성된 `.bin` 파일을 STM32CubeProgrammer 등을 사용하여 OpenCR 보드에 업로드합니다.
+3. `dfu-util`을 사용하여 펌웨어를 업로드합니다:
+   ```bash
+   sudo dfu-util -a 0 -s 0x08000000:leave -D build/opencr.bin
+   ```
 
-## 주의 사항 (Limitations)
-- 현재 드라이버는 `Read`나 `Ping` 동작 시 모터가 보내는 Status Packet 내부의 세부 에러 플래그(Error flag)를 깊게 검사하지 않습니다.
-- 버튼 디바운싱(Debouncing) 로직과 제어 루프는 `while(1)` 문 안에서 `HAL_Delay()`를 이용한 간단한 방식으로 구현되어 있습니다. 더 복잡하고 정밀한 제어가 필요한 경우 타이머 인터럽트(Timer Interrupt) 기반으로 변경하는 것을 권장합니다.
+## 주요 개선 사항 (Improvements)
+- **안정성 향상:** 인터럽트 내에서 `HAL_Delay()`를 사용하지 않는 Non-blocking 설계를 통해 시스템이 멈추는(Hang) 현상을 방지했습니다.
+- **CPU 효율성:** 제어 루프를 특정 주기로 고정(100Hz)하여 불필요한 UART 통신 부하를 줄이고 전력 효율을 높였습니다.
+- **확장성:** 메인 루프가 자유로워짐에 따라 향후 USB 통신이나 센서 데이터 처리 등 추가 기능을 병렬로 구현하기 용이합니다.
+
 
 
 cd ~/ws/opencr_dxl/build && make -j4 && arm-none-eabi-objcopy -O binary opencr.elf opencr.bin

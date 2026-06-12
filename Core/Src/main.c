@@ -57,6 +57,9 @@ uint32_t last_tick = 0;
 int8_t motor_state = 0; // 0: STOP, 1: FORWARD, 2: BACKWARD
 uint8_t btn1_prev = 1;
 uint8_t btn2_prev = 1;
+uint16_t btn1_cnt = 0;
+uint16_t btn2_cnt = 0;
+uint32_t led_cnt = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -132,44 +135,14 @@ int main(void)
   
   // Initial Stop
   DXL_WriteWord(0xFE, DXL_ADDR_GOAL_VELOCITY, 0);
+
+  HAL_TIM_Base_Start_IT(&htim3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Button Check (Active LOW)
-    uint8_t btn1 = HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin);
-    uint8_t btn2 = HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin);
-
-    // Button 1 (Forward / Stop)
-    if (btn1 == GPIO_PIN_RESET && btn1_prev == GPIO_PIN_SET) {
-        if (motor_state == 1) motor_state = 0;
-        else motor_state = 1;
-        
-        int32_t vel = (motor_state == 1) ? 200 : 0;
-        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        HAL_Delay(50); // Simple debounce
-    }
-    btn1_prev = btn1;
-
-    // Button 2 (Backward / Stop)
-    if (btn2 == GPIO_PIN_RESET && btn2_prev == GPIO_PIN_SET) {
-        if (motor_state == 2) motor_state = 0;
-        else motor_state = 2;
-        
-        int32_t vel = (motor_state == 2) ? -200 : 0;
-        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
-        HAL_Delay(50); // Simple debounce
-    }
-    btn2_prev = btn2;
-
-    if (HAL_GetTick() - last_tick > 500) {
-      last_tick = HAL_GetTick();
-      HAL_GPIO_TogglePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin);
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -290,7 +263,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 1080-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 100-1;
+  htim3.Init.Period = 1000-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -492,7 +465,49 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM3)
+  {
+    // --- 1. Button 1 Debouncing & Logic ---
+    uint8_t btn1 = HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin);
+    if (btn1 == GPIO_PIN_RESET) { // Pressed (Active LOW)
+      if (btn1_cnt < 5) btn1_cnt++; // 50ms (at 10ms interval)
+      if (btn1_cnt == 5 && btn1_prev == GPIO_PIN_SET) {
+        motor_state = (motor_state == 1) ? 0 : 1;
+        int32_t vel = (motor_state == 1) ? 200 : 0;
+        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        btn1_prev = GPIO_PIN_RESET;
+      }
+    } else {
+      btn1_cnt = 0;
+      btn1_prev = GPIO_PIN_SET;
+    }
 
+    // --- 2. Button 2 Debouncing & Logic ---
+    uint8_t btn2 = HAL_GPIO_ReadPin(BUT_USER2_GPIO_Port, BUT_USER2_Pin);
+    if (btn2 == GPIO_PIN_RESET) {
+      if (btn2_cnt < 5) btn2_cnt++;
+      if (btn2_cnt == 5 && btn2_prev == GPIO_PIN_SET) {
+        motor_state = (motor_state == 2) ? 0 : 2;
+        int32_t vel = (motor_state == 2) ? -200 : 0;
+        DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)vel);
+        btn2_prev = GPIO_PIN_RESET;
+      }
+    } else {
+      btn2_cnt = 0;
+      btn2_prev = GPIO_PIN_SET;
+    }
+
+    // --- 3. LED Toggling (500ms -> 50 ticks at 10ms) ---
+    if (++led_cnt >= 50) {
+      led_cnt = 0;
+      HAL_GPIO_TogglePin(SYS_USER_LED1_GPIO_Port, SYS_USER_LED1_Pin);
+    }
+  }
+}
 /* USER CODE END 4 */
 
  /* MPU Configuration */
