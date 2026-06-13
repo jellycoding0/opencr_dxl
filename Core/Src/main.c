@@ -65,6 +65,12 @@ uint32_t led_cnt = 0;
 float goal_linear_vel = 0.0f;
 float goal_angular_vel = 0.0f;
 
+int32_t present_pos_l = 0;
+int32_t present_pos_r = 0;
+uint32_t odom_tick = 0;
+volatile uint8_t req_odom_read = 0;
+uint32_t last_hb_tick = 0;
+
 #define WHEEL_SEPARATION    0.160f  // m (160mm)
 #define WHEEL_RADIUS        0.033f  // m (33mm)
 #define DXL_VEL_UNIT_RPM    0.229f  // 1 unit = 0.229 rpm
@@ -127,20 +133,27 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   DXL_Init();
-  HAL_Delay(500); // Wait for motors to boot
+  HAL_Delay(1000); // Wait for motors to boot
   
-  // 1. Disable Torque first to change mode (using Broadcast ID 0xFE)
+  // 1. Disable Torque first to change mode
   DXL_WriteByte(0xFE, DXL_ADDR_TORQUE_ENABLE, 0);
-  HAL_Delay(10);
+  HAL_Delay(50);
   
   // 2. Set Operating Mode to Velocity Control (1)
   DXL_WriteByte(0xFE, DXL_ADDR_OPERATING_MODE, 1);
-  HAL_Delay(10);
+  HAL_Delay(50);
   
-  // 3. Enable Torque for ID 1, 2 and Broadcast (0xFE)
-  DXL_WriteByte(0xFE, DXL_ADDR_TORQUE_ENABLE, 1);
+  // 3. Set Status Return Level to 1 (Respond only to READ)
+  DXL_WriteByte(1, 68, 1);
+  HAL_Delay(20);
+  DXL_WriteByte(2, 68, 1);
+  HAL_Delay(20);
+  
+  // 4. Enable Torque
   DXL_WriteByte(1, DXL_ADDR_TORQUE_ENABLE, 1);
+  HAL_Delay(20);
   DXL_WriteByte(2, DXL_ADDR_TORQUE_ENABLE, 1);
+  HAL_Delay(20);
   
   // Initial Stop
   DXL_WriteWord(0xFE, DXL_ADDR_GOAL_VELOCITY, 0);
@@ -161,27 +174,46 @@ int main(void)
         if (buf_idx > 0) {
           cmd_buf[buf_idx] = '\0';
           if (cmd_buf[0] == 'V') {
-            // Receipt Confirmation: Toggle Blue LED
             HAL_GPIO_TogglePin(GPIOE, SYS_USER_LED2_Pin);
-            
-            // Robust parsing without sscanf float
             char *comma = strchr(cmd_buf, ',');
             if (comma) {
               *comma = '\0';
               goal_linear_vel = atof(&cmd_buf[1]);
-              goal_angular_vel = atof(comma + 2); // Skip ',A'
+              char *a_char = strchr(comma + 1, 'A');
+              if (a_char) goal_angular_vel = atof(a_char + 1);
+              else goal_angular_vel = atof(comma + 1);
             }
-          } else if (cmd_buf[0] == 'T') {
-            // Test command: Move motors directly to verify DXL communication
-            DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, 100);
-            DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, -100);
-            HAL_Delay(100);
           }
         }
         buf_idx = 0;
       } else {
         if (buf_idx < 63) cmd_buf[buf_idx++] = (char)res;
       }
+    }
+
+    // 1. Heartbeat (Removed for production)
+    /*
+    if (HAL_GetTick() - last_hb_tick >= 1000) {
+      last_hb_tick = HAL_GetTick();
+      CDC_Print("H\n");
+    }
+    */
+
+    // 2. Process Odometry Read Request (Safe outside of ISR)
+    if (req_odom_read) {
+        req_odom_read = 0;
+        uint32_t raw_l = 0, raw_r = 0;
+        
+        HAL_NVIC_DisableIRQ(TIM3_IRQn); 
+        HAL_StatusTypeDef r1 = DXL_ReadWord(1, DXL_ADDR_PRESENT_POSITION, &raw_l);
+        HAL_StatusTypeDef r2 = DXL_ReadWord(2, DXL_ADDR_PRESENT_POSITION, &raw_r);
+        HAL_NVIC_EnableIRQ(TIM3_IRQn);
+        
+        if (r1 == HAL_OK && r2 == HAL_OK) {
+            present_pos_l = (int32_t)raw_l;
+            present_pos_r = (int32_t)raw_r;
+            CDC_Print("O%ld,%ld\n", present_pos_l, present_pos_r);
+        }
     }
     /* USER CODE END WHILE */
 
@@ -510,23 +542,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if(htim->Instance == TIM3)
   {
     // --- 1. Mobile Robot Kinematics (Differential Drive) ---
-    // Left wheel: ID 1, Right wheel: ID 2
     float v_l = goal_linear_vel - (goal_angular_vel * WHEEL_SEPARATION / 2.0f);
     float v_r = goal_linear_vel + (goal_angular_vel * WHEEL_SEPARATION / 2.0f);
 
-    // m/s to RPM
     float rpm_l = (v_l / WHEEL_RADIUS) * (60.0f / (2.0f * PI));
     float rpm_r = (v_r / WHEEL_RADIUS) * (60.0f / (2.0f * PI));
 
-    // RPM to DXL unit
     int32_t dxl_vel_l = (int32_t)(rpm_l / DXL_VEL_UNIT_RPM);
     int32_t dxl_vel_r = (int32_t)(rpm_r / DXL_VEL_UNIT_RPM);
 
-    // Apply motor commands (Adjusting signs for mounting direction)
+    // Apply motor commands (Correct signs for your specific mounting)
+    // ID 1 (Left): Negated to fix reverse rotation
     DXL_WriteWord(1, DXL_ADDR_GOAL_VELOCITY, (uint32_t)-dxl_vel_l);
     DXL_WriteWord(2, DXL_ADDR_GOAL_VELOCITY, (uint32_t)-dxl_vel_r);
 
-    // --- 2. Button 1 Debouncing & Logic (Safety Stop) ---
+    // --- 2. Odometry Feedback Request (20Hz) ---
+    if (++odom_tick >= 5) {
+      odom_tick = 0;
+      req_odom_read = 1; // Flag main loop to perform the read safely
+    }
+
+    // --- 3. Button 1 Debouncing & Logic (Safety Stop) ---
     uint8_t btn1 = HAL_GPIO_ReadPin(BUT_USER1_GPIO_Port, BUT_USER1_Pin);
     if (btn1 == GPIO_PIN_RESET) {
       if (btn1_cnt < 5) btn1_cnt++;

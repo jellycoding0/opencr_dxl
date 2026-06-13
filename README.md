@@ -1,47 +1,74 @@
-# OpenCR 다이나믹셀 XL430-W250 제어 프로젝트
+# OpenCR ROS 2 Mobile Robot LLC (Low-Level Controller)
 
-이 프로젝트는 무거운 공식 Dynamixel SDK를 사용하지 않고, 가벼운 맞춤형 **Dynamixel Protocol 2.0** 드라이버를 구현하여 OpenCR 1.0 보드(STM32F746)로 모바일 로봇(터틀봇3 버거 사양)을 제어합니다.
+이 프로젝트는 OpenCR 1.0(STM32F746) 보드를 사용하여 다이나믹셀 XL430-W250 기반 모바일 로봇(터틀봇3 버거 사양)을 위한 강력하고 정밀한 **하위 제어기(LLC)**를 구현합니다. ROS 2와 완벽하게 연동되며, 실시간 기구학 계산 및 오도메트리 피드백을 지원합니다.
 
-## 하드웨어 설정 (Hardware Setup)
-- **제어 보드:** OpenCR 1.0 (STM32F746)
-- **모터:** 2x 다이나믹셀 XL430-W250 (ID 1: 왼쪽 바퀴, ID 2: 오른쪽 바퀴)
-- **로봇 사양:** 터틀봇3 버거 (바퀴 간격: 160mm, 바퀴 지름: 66mm)
-- **통신 설정:** UART4 (1,000,000 bps) / USB CDC (Virtual COM Port)
+## 하드웨어 사양 (Hardware Specification)
+- **제어 보드:** OpenCR 1.0 (ARM Cortex-M7)
+- **액추에이터:** 2x Dynamixel XL430-W250 (Protocol 2.0)
+  - ID 1: 왼쪽 바퀴 (Left Wheel)
+  - ID 2: 오른쪽 바퀴 (Right Wheel)
+- **기구학 파라미터:**
+  - 바퀴 간격 (Wheel Separation): 160mm
+  - 바퀴 지름 (Wheel Diameter): 66mm
+- **통신 포트:** 
+  - 모터: UART4 (1,000,000 bps)
+  - PC 연동: USB CDC (Virtual COM Port)
 
-## 주요 기능 및 구현 (Features)
-1. **차동 구동 기구학 (Differential Drive Kinematics)**:
-   - ROS 2의 `/cmd_vel`과 호환되는 선속도(Linear) 및 각속도(Angular) 입력을 개별 바퀴 속도(RPM)로 변환합니다.
-   - 100Hz 타이머 인터럽트 내에서 실시간 기구학 계산 및 모터 제어가 수행됩니다.
+## 주요 기능 (Core Features)
 
-2. **PC 기반 원격 제어 (Teleoperation)**:
-   - 전용 Python 스크립트(`teleop_opencr.py`)를 통해 키보드(`w, a, s, d, x`)로 로봇을 실시간 제어할 수 있습니다.
-   - USB CDC(Virtual COM Port)를 통한 텍스트 기반 통신 프로토콜을 사용합니다.
+### 1. 고성능 제어 루프 (Real-time Control)
+- **100Hz 인터럽트 구동:** TIM3 타이머 인터럽트 기반의 비차단(Non-blocking) 설계를 통해 10ms 주기의 정밀한 속도 제어를 보장합니다.
+- **안정적인 반이중 통신:** UART RX FIFO 자동 플러싱 및 방향 전환 타이밍 최적화를 통해 다이나믹셀과의 통신 신뢰성을 극대화했습니다.
 
-3. **강력한 명령 파싱 (Robust Command Parsing)**:
-   - 임베디드 환경에서 부동 소수점 라이브러리 의존성을 최소화하기 위해 수동 문자열 분해 및 `atof`를 이용한 안정적인 파싱 로직을 구현했습니다.
+### 2. ROS 2 통합 (ROS 2 Integration)
+- **전용 시리얼 브릿지 (`ros2_opencr_bridge.py`):**
+  - `/cmd_vel` (geometry_msgs/Twist) 구독: 선속도/각속도 명령 수신.
+  - `/odom` (nav_msgs/Odometry) 발행: 실시간 위치/자세 데이터 전송.
+  - `TF` 발행: `odom -> base_footprint` 좌표계 변환 실시간 전송.
+- **차동 구동 기구학:** 터틀봇 표준 좌표계에 맞춘 전방향/회전 운동 변환 로직이 내장되어 있습니다.
 
-4. **안전 기능 (Safety Features)**:
-   - **Emergency Stop:** 보드의 물리 버튼(Button 1)을 눌러 즉시 모든 속도를 0으로 초기화할 수 있습니다.
-   - **Debug Feedback:** 명령 수신 시 보드의 파란색 LED(LED2)가 토글되어 통신 상태를 직관적으로 확인할 수 있습니다.
+### 3. 정밀 오도메트리 (Precise Odometry)
+- **20Hz 피드백:** 초당 20회 엔코더 값을 읽어 PC로 전송합니다.
+- **Rollover 처리:** 0~4095 엔코더 값의 오버플로우/언더플로우를 완벽하게 처리하여 데이터 튐 현상이 없습니다.
+- **부호 보정:** 모터 장착 방향에 따른 부호를 자동으로 보정하여 ROS 2 표준 좌표계와 일치시킵니다.
+
+### 4. 안전 및 진단 (Safety & Diagnostics)
+- **비상 정지:** 보드의 물리 버튼(SW1)을 눌러 즉시 하드웨어 수준에서 정지할 수 있습니다.
+- **상태 표시:** 명령 수신 시 파란색 LED(LED2) 토글, 시스템 동작 시 주황색 LED(LED1) 점멸.
 
 ## 사용 방법 (Usage)
 
-### 1. 빌드 및 업로드
+### 1. 펌웨어 빌드 및 업로드
+OpenCR 보드를 DFU 모드로 전환한 후 실행하세요.
 ```bash
-cd build && make -j4 && arm-none-eabi-objcopy -O binary opencr.elf opencr.bin
+cd build
+make -j4
+arm-none-eabi-objcopy -O binary opencr.elf opencr.bin
 sudo dfu-util -a 0 -s 0x08000000:leave -D opencr.bin
 ```
 
-### 2. PC 제어 스크립트 실행
+### 2. ROS 2 브릿지 실행
+PC에서 OpenCR과 시리얼 통신을 연결하고 ROS 2 토픽을 생성합니다.
 ```bash
-# Python 시리얼 라이브러리 설치 (필요시)
+# 의존성 설치
 pip install pyserial
 
-# 제어 스크립트 실행
-python3 teleop_opencr.py
+# 브릿지 노드 실행
+python3 ros2_opencr_bridge.py
 ```
 
-## 주요 개선 사항 (Improvements)
-- **Non-blocking 구조:** 10ms 주기(100Hz)의 타이머 인터럽트 기반 설계로 통신 지연이나 시스템 멈춤 현상을 완전히 해결했습니다.
-- **확장성:** USB CDC 인터페이스를 통해 ROS 2 노드와의 연동이 매우 용이합니다.
-- **안정성:** `volatile` 속성과 전용 링 버퍼를 사용하여 USB 데이터 수신 누락을 방지했습니다.
+### 3. 로봇 조종 테스트
+새 터미널에서 명령을 내려보세요.
+```bash
+# 직진 명령 테스트
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+
+# 오도메트리 데이터 확인
+ros2 topic echo /odom
+```
+
+## 프로젝트 구조 (Project Structure)
+- `Core/Src/main.c`: 제어 루프 및 시리얼 명령 파싱.
+- `Core/Src/dynamixel.c`: Protocol 2.0 드라이버 핵심 로직.
+- `ros2_opencr_bridge.py`: ROS 2와 OpenCR 사이의 데이터 가교 역할.
+- `teleop_opencr.py`: (옵션) 키보드 기반의 간단한 테스트 스크립트.

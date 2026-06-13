@@ -61,21 +61,35 @@ uint16_t DXL_UpdateCRC(uint16_t crc_accum, uint8_t *data_blk_ptr, uint16_t data_
 }
 
 static HAL_StatusTypeDef DXL_Transmit(uint8_t *p_data, uint16_t len) {
+    // Aggressive RX Flush before transmit to clear any stale data (like old Status Packets)
+    uint8_t dummy;
+    while (__HAL_UART_GET_FLAG(&huart4, UART_FLAG_RXNE)) {
+        dummy = (uint8_t)(huart4.Instance->RDR & 0xFF);
+        (void)dummy;
+    }
+    __HAL_UART_CLEAR_OREFLAG(&huart4);
+
     __HAL_UART_CLEAR_FLAG(&huart4, UART_FLAG_TC);
     DXL_SetDir(1);
-    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart4, p_data, len, 100);
+    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart4, p_data, len, 10);
     if (status == HAL_OK) {
         while(__HAL_UART_GET_FLAG(&huart4, UART_FLAG_TC) == RESET);
     }
-    // Tiny delay to ensure the last stop bit is fully sent out
-    for(volatile int i=0; i<50; i++); 
+    
+    // Exact delay for 1Mbps (approx 10-20us) to ensure Stop bit is on the wire
+    for(volatile int i=0; i<100; i++); 
+    
     DXL_SetDir(0);
     return status;
 }
 
 static HAL_StatusTypeDef DXL_Receive(uint8_t *p_data, uint16_t len) {
-    HAL_StatusTypeDef status = HAL_UART_Receive(&huart4, p_data, len, 10); // Short timeout
-    return status;
+    // Clear any hardware errors that might have occurred during/after transmit
+    __HAL_UART_CLEAR_OREFLAG(&huart4);
+    __HAL_UART_CLEAR_NEFLAG(&huart4);
+    __HAL_UART_CLEAR_FEFLAG(&huart4);
+    
+    return HAL_UART_Receive(&huart4, p_data, len, 20); // 20ms is plenty for 1Mbps
 }
 
 HAL_StatusTypeDef DXL_Ping(uint8_t id) {
@@ -92,9 +106,6 @@ HAL_StatusTypeDef DXL_Ping(uint8_t id) {
     uint16_t crc = DXL_UpdateCRC(0, packet, 8);
     packet[8] = crc & 0xFF;
     packet[9] = (crc >> 8) & 0xFF;
-    
-    // Clear UART RX buffer before transmit
-    __HAL_UART_FLUSH_DRREGISTER(&huart4);
     
     if (DXL_Transmit(packet, 10) != HAL_OK) return HAL_ERROR;
     
@@ -136,15 +147,17 @@ HAL_StatusTypeDef DXL_Read(uint8_t id, uint16_t addr, uint8_t *p_data, uint16_t 
     packet[12] = crc & 0xFF;
     packet[13] = (crc >> 8) & 0xFF;
     
-    __HAL_UART_FLUSH_DRREGISTER(&huart4);
     if (DXL_Transmit(packet, 14) != HAL_OK) return HAL_ERROR;
     
-    // Response length: Header(7) + ERR(1) + Data(len) + CRC(2) = 10 + len
+    // Status Packet Protocol 2.0: FF FF FD 00 ID LEN_L LEN_H 55 ERR PARAM... CRC_L CRC_H
+    // Length = 11 + Parameters (len)
     uint8_t rx_buf[128];
-    if (10 + len > 128) return HAL_ERROR;
+    if (11 + len > 128) return HAL_ERROR;
     
-    if (DXL_Receive(rx_buf, 10 + len) == HAL_OK) {
-        if (rx_buf[4] == id && rx_buf[8] == 0) { // Check ID and Error byte
+    if (DXL_Receive(rx_buf, 11 + len) == HAL_OK) {
+        // Headers are 0xFF 0xFF 0xFD 0x00
+        if (rx_buf[0] == 0xFF && rx_buf[1] == 0xFF && rx_buf[2] == 0xFD && 
+            rx_buf[4] == id && rx_buf[8] == 0) { // Check ID and Error byte
             memcpy(p_data, &rx_buf[9], len);
             return HAL_OK;
         }
